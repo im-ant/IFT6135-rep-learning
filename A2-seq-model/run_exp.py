@@ -89,7 +89,7 @@ from solution import make_model as TRANSFORMER
 parser = argparse.ArgumentParser(description='PyTorch Penn Treebank Language Modeling')
 
 # Arguments you may need to set to run different experiments in 4.1 & 4.2.
-parser.add_argument('--data', type=str, default='data',
+parser.add_argument('--data', type=str, default='../IFT6135H20_assignment/assignment2/data',
                     help='location of the data corpus. We suggest you change the default\
                     here, rather than passing as an argument, to avoid long file paths.')
 parser.add_argument('--model', type=str, default='GRU',

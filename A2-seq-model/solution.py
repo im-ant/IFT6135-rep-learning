@@ -184,6 +184,40 @@ class RNN(nn.Module):
                         shape: (generated_seq_len, batch_size)
         """
         # TODO ========================
+        if inputs.is_cuda:
+            device = inputs.get_device()
+        else:
+            device = torch.device("cpu")
+
+        # Apply the Embedding layer on the input
+        embed_input = self.embeddings(inputs) # shape (batch_size, emb_size)
+
+        # Create a tensor to store samples during the Forward
+        # shape (generated_seq_len, batch_size)
+        samples = torch.zeros(generated_seq_len, inputs.size(0)).to(device)
+
+        # For each time step
+        for timestep in range(generated_seq_len):
+            # Apply dropout on the embedding result
+            input_ = self.dropout(embed_input) # (batch_size, emb_size)
+
+            # For each layer
+            for layer in range(self.num_layers):
+                # Calculate the hidden states
+                # And apply the activation function tanh on it
+                hidden[layer] = torch.tanh(
+                    self.layers[layer](torch.cat([input_, hidden[layer]], 1))
+                )
+                # Apply dropout on this layer, but not for the recurrent units
+                input_ = self.dropout(hidden[layer])
+
+            # Store the output of the time step
+            t_out = self.out_layer(input_) # (batch_size, vocab_size)
+            max_idx = torch.argmax(t_out, dim=1).long()
+            samples[timestep] = max_idx
+            # Update input for next timestep
+            embed_input = self.embeddings(max_idx)
+
         return samples
 
 
@@ -218,20 +252,20 @@ class GRU(nn.Module): # Implement a stacked GRU RNN
         self.batch_size = batch_size
         # TODO ========================
 
-        self.word_embeddings = nn.Linear(self.emb_size, self.hidden_size,
-                                         bias=False)
+        self.word_embeddings = nn.Embedding(num_embeddings=self.vocab_size,
+                                            embedding_dim=self.emb_size)
 
         # Create "reset gate" layers
         self.r = clones(nn.Linear(self.emb_size + self.hidden_size,
-                                  self.hidden_size), self.num_layers-1)
+                                  self.hidden_size), self.num_layers)
 
         # Create "forget gate" layers
         self.z = clones(nn.Linear(self.emb_size + self.hidden_size,
-                                  self.hidden_size), self.num_layers-1)
+                                  self.hidden_size), self.num_layers)
 
         # Create the "memory content" layers
         self.h = clones(nn.Linear(self.emb_size + self.hidden_size,
-                                  self.hidden_size), self.num_layers-1)
+                                  self.hidden_size), self.num_layers)
 
         # Dropout
         self.dropout = nn.Dropout(1 - self.dp_keep_prob)
@@ -247,30 +281,33 @@ class GRU(nn.Module): # Implement a stacked GRU RNN
 
     def init_embedding_weights_uniform(self, init_range=0.1):
         # TODO ========================
-        nn.init.uniform_(self.word_embeddings, -0.1, 0.1)
+        nn.init.uniform_(self.word_embeddings.weight, -0.1, 0.1)
 
 
     def init_reset_gate_weights_uniform(self):
         # TODO ========================
         b = 1/math.sqrt(self.hidden_size)
         for i in range(len(self.r)):
-            nn.init.uniform_(self.r[i], -b, b)
+            nn.init.uniform_(self.r[i].weight, -b, b)
+            nn.init.uniform_(self.r[i].bias, -b, b)
 
     def init_forget_gate_weights_uniform(self):
         # TODO ========================
         b = 1 / math.sqrt(self.hidden_size)
         for i in range(len(self.z)):
-            nn.init.uniform_(self.z[i], -b, b)
+            nn.init.uniform_(self.z[i].weight, -b, b)
+            nn.init.uniform_(self.z[i].bias, -b, b)
 
     def init_memory_weights_uniform(self):
         # TODO ========================
         b = 1 / math.sqrt(self.hidden_size)
         for i in range(len(self.h)):
-            nn.init.uniform_(self.h[i], -b, b)
+            nn.init.uniform_(self.h[i].weight, -b, b)
+            nn.init.uniform_(self.h[i].bias, -b, b)
 
     def init_out_layer_weights_uniform(self):
         # TODO ========================
-        nn.init.uniform_(self.out_layer, -0.1, 0.1)
+        nn.init.uniform_(self.out_layer.weight, -0.1, 0.1)
         nn.init.zeros_(self.out_layer.bias)
 
 
@@ -284,7 +321,7 @@ class GRU(nn.Module): # Implement a stacked GRU RNN
         initial_hidden = torch.zeros(self.num_layers, self.batch_size,
                                      self.hidden_size)
         return initial_hidden
-    
+
 
     def forward(self, inputs, hidden):
         """ Compute the recurrent updates.
@@ -317,6 +354,40 @@ class GRU(nn.Module): # Implement a stacked GRU RNN
                         shape: (num_layers, batch_size, hidden_size)
         """
         # TODO ========================
+        # (Inspired by the above RNN input)
+        if inputs.is_cuda:
+            device = inputs.get_device()
+        else:
+            device = torch.device("cpu")
+
+        # Apply the Embedding layer on the input
+        embed_out = self.word_embeddings(inputs)  # shape (seq_len, batch_size, emb_size)
+
+        # Create a tensor to store outputs during the Forward
+        logits = torch.zeros(self.seq_len, self.batch_size, self.vocab_size).to(device)
+
+        # For each time step
+        for timestep in range(self.seq_len):
+            # Apply dropout on the embedding result
+            input_ = self.dropout(embed_out[timestep]) # (batch_size, emb_size)
+            # For each layer
+            for layer in range(self.num_layers):
+                # ==
+                # Calculate the hidden states
+                h_t = hidden[layer].clone()
+                r_t = torch.sigmoid( self.r[layer](
+                    torch.cat([input_, h_t], 1)) )
+                z_t = torch.sigmoid( self.z[layer](
+                    torch.cat([input_, h_t], 1)) )
+                hh_t = torch.tanh( self.h[layer](
+                    torch.cat([input_, (r_t * h_t)],1)) )
+                hidden[layer] = ((1-z_t) * h_t) + (z_t * hh_t)
+
+                # Apply dropout on this layer, but not for the recurrent units
+                input_ = self.dropout(hidden[layer])
+            # Store the output of the time step
+            logits[timestep] = self.out_layer(input_)
+
         return logits, hidden
 
     def generate(self, input, hidden, generated_seq_len):
@@ -341,6 +412,44 @@ class GRU(nn.Module): # Implement a stacked GRU RNN
                         shape: (generated_seq_len, batch_size)
         """
         # TODO ========================
+        if input.is_cuda:
+            device = input.get_device()
+        else:
+            device = torch.device("cpu")
+
+        # Apply the Embedding layer on the input
+        embed_input = self.word_embeddings(input) # shape (batch_size, emb_size)
+
+        # Create a tensor to store samples during the Forward
+        # shape (generated_seq_len, batch_size)
+        samples = torch.zeros(generated_seq_len, input.size(0)).to(device)
+
+        # For each time step
+        for t in range(generated_seq_len):
+            # Apply dropout on the embedding result
+            input_ = self.dropout(embed_input) # (batch_size, emb_size)
+
+            # For each layer
+            for layer in range(self.num_layers):
+                # ==
+                # Calculate the hidden states
+                r_t = torch.sigmoid( self.r[layer](
+                    torch.cat([input_, hidden[layer]], 1)) )
+                z_t = torch.sigmoid( self.z[layer](
+                    torch.cat([input_, hidden[layer]], 1)) )
+                hh_t = torch.tanh( self.h[layer](
+                    torch.cat([input_, (r_t * hidden[layer])],1)) )
+                hidden[layer] = ((1-z_t) * hidden[layer]) + (z_t * hh_t)
+
+                # Apply dropout on this layer, but not for the recurrent units
+                input_ = self.dropout(hidden[layer])
+            # Store the output of the time step
+            t_out = self.out_layer(input_) # (batch_size, vocab_size)
+            max_idx = torch.argmax(t_out, dim=1).long()
+            samples[t] = max_idx
+            # Update input for next timestep
+            embed_input = self.word_embeddings(max_idx)
+
         return samples
 
 
@@ -420,6 +529,7 @@ class MultiHeadedAttention(nn.Module):
         assert n_units % n_heads == 0
         self.n_units = n_units
         self.n_heads = n_heads
+
         # TODO ========================
         # Create the layers below. self.linears should contain 3 linear
         # layers that compute the projection from n_units => n_heads x d_k
@@ -433,8 +543,11 @@ class MultiHeadedAttention(nn.Module):
         # Note: the only Pytorch modules you are allowed to use are nn.Linear
         # and nn.Dropout. You can also use softmax, masked_fill and the "clones"
         # function we provide.
-        self.linears =
-        self.dropout =
+
+        self.linears = clones( nn.Linear(n_units, n_heads*self.d_k), 3)
+        self.linears.append( nn.Linear(n_heads*self.d_k, n_units) )
+        self.dropout = nn.Dropout(1 - dropout) # TODO NOTE not sure if this is correct
+
 
     def attention(self, query, key, value, mask=None, dropout=None):
         # Implement scaled dot product attention
@@ -456,15 +569,20 @@ class MultiHeadedAttention(nn.Module):
         # the normalized scores after dropout.
 
         # TODO ========================
-        scores =
+
+        Q = query # (batch, n_heads, seq_len, self.d_k)
+        K = key
+        scores = torch.matmul(Q, K.transpose(-2,-1)) # (batch, n_heads, seq_len, seq_len)
+        scores = scores / np.sqrt(self.d_k)
+
         if mask is not None:
             if len(mask.size()) == 3 and len(query.size()) == 4:
                 mask.unsqueeze(1)
-            scores = scores.masked_fill()
-        norm_scores =
+            scores = scores.masked_fill(mask==0, -1e9) # NOTE maybe confirm implementation
+        norm_scores = F.softmax(scores, dim=-1) # NOTE confirm actual dimension to softmax over
         if dropout is not None:
-            norm_scores =  # Tensor of shape batch_size x n_heads x seq_len x seq_len
-        output = # Tensor of shape batch_size x n_heads x seq_len x d_k
+            norm_scores = dropout(norm_scores) # Tensor of shape batch_size x n_heads x seq_len x seq_len
+        output = torch.matmul(norm_scores, value) # Tensor of shape batch_size x n_heads x seq_len x d_k
 
         return output, norm_scores
 
@@ -481,14 +599,32 @@ class MultiHeadedAttention(nn.Module):
         # TODO ========================
         # 1) Do all the linear projections in batch from n_units => n_heads x d_k
 
+        b_siz = query.size(0) # batch size
+        s_len = query.size(1) # sequence length
+
+        Q = self.linears[0](query) # shape (batch, seq_len, n_heads*self.d_k)
+        Q = Q.view(b_siz, s_len, self.n_heads, self.d_k).transpose(1,2)
+        K = self.linears[1](key)
+        K = K.view(b_siz, s_len, self.n_heads, self.d_k).transpose(1,2)
+        V = self.linears[2](value)
+        V = V.view(b_siz, s_len, self.n_heads, self.d_k).transpose(1,2)
+
         # 2) Apply attention on all the projected vectors in batch.
         # The query, key, value inputs to the attention method will be of size
         # batch_size x n_heads x seq_len x d_k
+        output, norm_scores = self.attention(Q, K, V,
+                                             mask=mask,
+                                             dropout=self.dropout)
+        # output has shape (batch_size, n_heads, seq_len, d_k)
 
         # 3) "Concat" using a view and apply a final linear.
+        # Reshape: (batch_size, n_heads, seq_len, d_k) -> (batch_size, seq_len, n_heads*d_k)
+        cout = output.transpose(1,2) #(batch_size, seq_len, n_heads, d_k)
+        cout = cout.contiguous()
+        cout = cout.view(cout.size(0), cout.size(1), -1)
+        lin_out = self.linears[3](cout) #(batch_size, seq_len, self.n_units)
 
-
-        return # size: (batch_size, seq_len, self.n_units)
+        return lin_out # size: (batch_size, seq_len, self.n_units)
 
 
 
