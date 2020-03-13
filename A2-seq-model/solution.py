@@ -256,16 +256,25 @@ class GRU(nn.Module): # Implement a stacked GRU RNN
                                             embedding_dim=self.emb_size)
 
         # Create "reset gate" layers
-        self.r = clones(nn.Linear(self.emb_size + self.hidden_size,
-                                  self.hidden_size), self.num_layers)
+        self.r = nn.ModuleList()
+        self.r.append(nn.Linear(self.emb_size + self.hidden_size,
+                                self.hidden_size))
+        self.r.extend(clones(nn.Linear(2*self.hidden_size, hidden_size),
+                             num_layers-1))
 
         # Create "forget gate" layers
-        self.z = clones(nn.Linear(self.emb_size + self.hidden_size,
-                                  self.hidden_size), self.num_layers)
+        self.z = nn.ModuleList()
+        self.z.append(nn.Linear(self.emb_size + self.hidden_size,
+                                self.hidden_size))
+        self.z.extend(clones(nn.Linear(2*self.hidden_size, hidden_size),
+                             num_layers - 1))
 
         # Create the "memory content" layers
-        self.h = clones(nn.Linear(self.emb_size + self.hidden_size,
-                                  self.hidden_size), self.num_layers)
+        self.h = nn.ModuleList()
+        self.h.append(nn.Linear(self.emb_size + self.hidden_size,
+                                self.hidden_size))
+        self.h.extend(clones(nn.Linear(2 * self.hidden_size, hidden_size),
+                             num_layers - 1))
 
         # Dropout
         self.dropout = nn.Dropout(1 - self.dp_keep_prob)
@@ -385,6 +394,7 @@ class GRU(nn.Module): # Implement a stacked GRU RNN
 
                 # Apply dropout on this layer, but not for the recurrent units
                 input_ = self.dropout(hidden[layer])
+
             # Store the output of the time step
             logits[timestep] = self.out_layer(input_)
 

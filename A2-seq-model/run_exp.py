@@ -89,7 +89,7 @@ from solution import make_model as TRANSFORMER
 parser = argparse.ArgumentParser(description='PyTorch Penn Treebank Language Modeling')
 
 # Arguments you may need to set to run different experiments in 4.1 & 4.2.
-parser.add_argument('--data', type=str, default='../IFT6135H20_assignment/assignment2/data',
+parser.add_argument('--data', type=str, default='/network/home/chenant/class/IFT6135-DL/IFT6135-rep-learning/IFT6135H20_assignment/assignment2/data',
                     help='location of the data corpus. We suggest you change the default\
                     here, rather than passing as an argument, to avoid long file paths.')
 parser.add_argument('--model', type=str, default='GRU',
@@ -153,9 +153,21 @@ argsdict['code_file'] = sys.argv[0]
 # name for the experimental dir
 print("\n########## Setting Up Experiment ######################")
 flags = [flag.lstrip('--').replace('/', '').replace('\\', '') for flag in sys.argv[1:]]
-experiment_path = os.path.join(args.save_dir, '_'.join([argsdict['model'],
-                                         argsdict['optimizer']]
-                                         + flags))
+#experiment_path = os.path.join(args.save_dir, '_'.join([argsdict['model'],
+#                                         argsdict['optimizer']]
+#                                         + flags))
+# NOTE ANTHONY MODIFIED THIS TO NOT OUTPUT UGLY PATHS
+experiment_path = os.path.join(args.save_dir, '_'.join([str(argsdict['model']),
+                                                        str(argsdict['optimizer']),
+                                                        str(argsdict['initial_lr']),
+                                                        str(argsdict['batch_size']),
+                                                        str(argsdict['seq_len']),
+                                                        str(argsdict['hidden_size']),
+                                                        str(argsdict['num_layers']),
+                                                        str(argsdict['dp_keep_prob']),
+                                                        str(argsdict['num_epochs']),
+                                                        str(argsdict['seq_len'])]))
+
 # Increment a counter so that previous results with the same args will not
 # be overwritten. Comment out the next four lines if you only want to keep
 # the most recent results.
