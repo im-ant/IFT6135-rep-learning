@@ -1,0 +1,112 @@
+#!/bin/bash
+
+# ===========================
+# Script submitted to sbatch to run job on Mila cluster
+#
+# DO NOT SUBMIT ON ITS OWN, submit through submission bash script
+# ===========================
+
+# Setting up variables
+DATA_PATH="/network/home/chenant/class/IFT6135-DL/IFT6135-rep-learning/IFT6135H20_assignment/assignment2/data"
+MODEL="RNN"
+
+SAVE_DIR="$out_dir"
+
+
+# ===========================
+# Experimental set-up
+
+# (1.1) Load packages
+module load python/3.7
+module load cuda/10.1 cuda/10.1/cudnn/7.6
+
+# (1.2) Load environment
+source $HOME/venvs/torchRL/bin/activate
+
+nvidia-smi
+
+# ===========================
+# Run experiments
+
+echo -e "\n---"
+echo -e "Running exp 1"
+echo -e "---\n"
+
+python -u run_exp.py --data="$DATA_PATH" \
+                     --model="$MODEL" \
+                     --optimizer=SGD \
+                     --initial_lr=1.0 \
+                     --batch_size=128 \
+                     --seq_len=35 \
+                     --hidden_size=512 \
+                     --num_layers=2 \
+                     --dp_keep_prob=0.8  \
+                     --num_epochs=20 \
+                     --save_best \
+                     --save_dir="$SAVE_DIR" \
+
+echo -e "\n---"
+echo -e "Running exp 2"
+echo -e "---\n"
+
+python -u run_exp.py --data="$DATA_PATH" \
+                     --model="$MODEL" \
+                     --optimizer=SGD \
+                     --initial_lr=1.0 \
+                     --batch_size=20 \
+                     --seq_len=35 \
+                     --hidden_size=512 \
+                     --num_layers=2 \
+                     --dp_keep_prob=0.8 \
+                     --num_epochs=20 \
+                     --save_dir="$SAVE_DIR" \
+
+
+echo -e "\n---"
+echo -e "Running exp 3"
+echo -e "---\n"
+
+python -u run_exp.py --data="$DATA_PATH" \
+                     --model="$MODEL" \
+                     --optimizer=SGD \
+                     --initial_lr=10.0 \
+                     --batch_size=128 \
+                     --seq_len=35 \
+                     --hidden_size=512 \
+                     --num_layers=2 \
+                     --dp_keep_prob=0.8  \
+                     --num_epochs=20 \
+                     --save_dir="$SAVE_DIR" \
+
+
+echo -e "\n---"
+echo -e "Running exp 4"
+echo -e "---\n"
+
+python -u run_exp.py --data="$DATA_PATH" \
+                     --model="$MODEL" \
+                     --optimizer=ADAM \
+                     --initial_lr=0.001 \
+                     --batch_size=128 \
+                     --seq_len=35 \
+                     --hidden_size=512 \
+                     --num_layers=2 \
+                     --dp_keep_prob=0.8  \
+                     --num_epochs=20 \
+                     --save_dir="$SAVE_DIR" \
+
+echo -e "\n---"
+echo -e "Running exp 5"
+echo -e "---\n"
+
+python -u run_exp.py --data="$DATA_PATH" \
+                     --model="$MODEL" \
+                     --optimizer=ADAM \
+                     --initial_lr=0.0001 \
+                     --batch_size=128 \
+                     --seq_len=35 \
+                     --hidden_size=512 \
+                     --num_layers=2 \
+                     --dp_keep_prob=0.8 \
+                     --num_epochs=20 \
+                     --save_dir="$SAVE_DIR" \
