@@ -158,7 +158,7 @@ def kl_gaussian_gaussian_mc(mu_q, logvar_q, mu_p, logvar_p, num_samples=1):
     kld = (-1.0/2.0) * (1.0/num_samples) * batch_sum
 
     # TODO NOTE maybe fix: there may be catastrophic cancellation happening
-    # sometimes get negative values 
+    # sometimes get negative values
 
     # kld
     return kld
