@@ -22,8 +22,14 @@ def log_likelihood_bernoulli(mu, target):
     mu = mu.view(batch_size, -1)
     target = target.view(batch_size, -1)
 
+    # ==
+    # Bernoulli log likelihood
+    ele_log_prob = ((target * mu.log())
+                    + ((1-target) * (1-mu).log()))  # (batch, input)
+    sample_log_prob = torhc.sum(ele_log_prob, dim=1)  # (batch, )
+
     # log_likelihood_bernoulli
-    return
+    return sample_log_prob
 
 
 def log_likelihood_normal(mu, logvar, z):
@@ -43,8 +49,15 @@ def log_likelihood_normal(mu, logvar, z):
     logvar = logvar.view(batch_size, -1)
     z = z.view(batch_size, -1)
 
+    # ==
+    # Gaussian log likelihood
+    # TODO: recheck my derivation of the log likelihood is correct
+    ele_rel = logvar - ((z-mu).pow(2) / (2*logvar.exp()))  # (batch, input)
+    ele_inv_ll = np.log(2*np.pi) + ele_rel  # add the log2pi constant
+    batch_ll = (-1.0/2.0) * torch.sum(ele_inv_ll, dim=1)  # (batch, )
+
     # log normal
-    return
+    return batch_ll
 
 
 def log_mean_exp(y):
