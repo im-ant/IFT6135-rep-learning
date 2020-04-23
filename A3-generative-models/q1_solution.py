@@ -26,7 +26,7 @@ def log_likelihood_bernoulli(mu, target):
     # Bernoulli log likelihood
     ele_log_prob = ((target * mu.log())
                     + ((1-target) * (1-mu).log()))  # (batch, input)
-    sample_log_prob = torhc.sum(ele_log_prob, dim=1)  # (batch, )
+    sample_log_prob = torch.sum(ele_log_prob, dim=1)  # (batch, )
 
     # log_likelihood_bernoulli
     return sample_log_prob
