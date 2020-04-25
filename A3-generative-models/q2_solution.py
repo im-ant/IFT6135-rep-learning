@@ -21,7 +21,34 @@ def lp_reg(x, y, critic):
     :param critic: (Module) - torch module that you want to regularize.
     :return: (FloatTensor) - shape: (1,) - Lipschitz penalty
     """
-    pass
+
+    # ==
+    # Lipschitz penalty
+
+    # Compute sample to use
+    unif = torch.distributions.uniform.Uniform(0.0, 1.0)
+    u = unif.sample()
+    x_hat = (u * x) + ((1-u) * y)
+    x_hat.requires_grad = True
+
+    # Compute gradient of sample
+    f_x = critic(x_hat)
+    f_x_sum = torch.sum(f_x)
+    f_x_sum.backward()
+
+    # Gradient norm of x.grad, x.grad has shape (batch, feature)
+    dx_norm = torch.norm(x_hat.grad, p=2, dim=1,
+                         keepdim=False)  # (batch, )
+
+    # Compute the per-element gradient penalty
+    grad_penalty = torch.max(torch.zeros(dx_norm.size()),
+                             (dx_norm - 1.0))  # (batch, )
+    grad_penalty_sq = grad_penalty.pow(2)
+
+    # Compute Lipschitz penalty
+    lp = torch.mean(grad_penalty_sq)
+
+    return lp
 
 
 def vf_wasserstein_distance(x, y, critic):
@@ -38,7 +65,17 @@ def vf_wasserstein_distance(x, y, critic):
     :param critic: (Module) - torch module used to compute the Wasserstein distance
     :return: (FloatTensor) - shape: (1,) - Estimate of the Wasserstein distance
     """
-    pass
+
+    # ==
+    # Wasserstein distance
+
+    f_P = critic(x)  # real samples, (batch, )
+    f_Q = critic(y)  # generated samples, (batch, )
+
+    # Estimate empirical Wasserstein distance
+    wd = torch.mean(f_P) - torch.mean(f_Q)
+
+    return wd
 
 
 def vf_squared_hellinger(x, y, critic):
@@ -53,14 +90,33 @@ def vf_squared_hellinger(x, y, critic):
     :param critic: (Module) - torch module used to compute the Squared Hellinger.
     :return: (FloatTensor) - shape: (1,) - Estimate of the Squared Hellinger
     """
-    pass
+
+    # ==
+    # Squared Hellinger objective
+
+    # Compute V(x)'s
+    v_P = critic(x)  # (batch, )
+    v_Q = critic(y)  # (batch, )
+
+    # Compute g(v)
+    gv_P = 1.0 - (-v_P).exp()  # (batch, )
+    gv_Q = 1.0 - (-v_Q).exp()  # (batch, )
+
+    # Compute -f(g)
+    neg_f = - ((gv_Q) / (1.0 - gv_Q))  # (batch, )
+
+    # Empirical average Squared Hellinger loss
+    sqh = torch.mean((gv_P + neg_f))
+
+    return sqh
 
 
 if __name__ == '__main__':
+    # ==
     # Example of usage of the code provided for answering Q2.5 as well as recommended hyper parameters.
     model = q2_model.Critic(2)
     optim = torch.optim.SGD(model.parameters(), lr=1e-3)
     sampler1 = iter(q2_sampler.distribution1(0, 512))
     theta = 0
     sampler2 = iter(q2_sampler.distribution1(theta, 512))
-    lambda_reg_lp = 50 # Recommended hyper parameters for the lipschitz regularizer.
+    lambda_reg_lp = 50  # Recommended hyper parameters for the lipschitz regularizer.
