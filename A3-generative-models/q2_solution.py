@@ -29,7 +29,7 @@ def lp_reg(x, y, critic):
     unif = torch.distributions.uniform.Uniform(0.0, 1.0)
     u = unif.sample()
     x_hat = (u * x) + ((1-u) * y)
-    x_hat.requires_grad = True
+    x_hat = x_hat.clone().detach().requires_grad_(True)
 
     # Compute gradient of sample
     f_x = critic(x_hat)
@@ -41,8 +41,11 @@ def lp_reg(x, y, critic):
                          keepdim=False)  # (batch, )
 
     # Compute the per-element gradient penalty
-    grad_penalty = torch.max(torch.zeros(dx_norm.size()),
-                             (dx_norm - 1.0))  # (batch, )
+    #zeros = torch.zeros(dx_norm.size()).to(x_hat.device)
+    #grad_penalty = torch.max(zeros, (dx_norm - 1.0))  # (batch, )
+
+    # TODO: try the relu in the unit test and in training
+    grad_penalty = torch.nn.functional.relu((dx_norm - 1.0))
     grad_penalty_sq = grad_penalty.pow(2)
 
     # Compute Lipschitz penalty
