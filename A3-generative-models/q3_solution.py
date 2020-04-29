@@ -1,6 +1,8 @@
 """
 Template for Question 3.
 @author: Samuel Lavoie
+
+Training code author: Anthony G. Chen
 """
 
 import argparse
@@ -66,68 +68,65 @@ def train_gan(args, logger):
         # Logging and counting
 
         for batch_idx, train_sample in enumerate(train_loader):
-            # Get data
-            train_X, train_y = train_sample
-            train_X = train_X.to(device)
-            train_y = train_y.to(device)
+            # Get real data
+            real_X, real_y = train_sample
+            real_X = real_X.to(device)
 
             # ==
             # Critic training
-            for n in range(n_critic_updates):
-                # Generate from distribution Q
-                with torch.no_grad():
-                    # generator.zero_grad()
-                    z_noise = nsampler.sample().to(device)
-                    Q_X = generator(z_noise)
-                Q_X = Q_X.detach()
 
-                # Critic loss
-                critic.zero_grad()
-                wd = q2_solution.vf_wasserstein_distance(train_X, Q_X, critic)
-                lp = q2_solution.lp_reg(train_X, Q_X, critic)
-
-                critic_loss = (-wd) + (lp_coeff * lp)
-                last_critic_loss = critic_loss.item()
-
-                # Backprop
-                critic_loss.backward()
-                optim_critic.step()
-
-
-            # ==
-            # Generator training
-
-            # Generate
-            generator.zero_grad()
+            # Generator distribution
             z_noise = nsampler.sample().to(device)
             Q_X = generator(z_noise)
+            Q_X = Q_X.detach()  # ensure no gradient to generator
 
-            # Compute loss
+            # Critic evaluation
             critic.zero_grad()
-            f_QX = critic(Q_X)
+            wd = q2_solution.vf_wasserstein_distance(real_X, Q_X, critic)
+            lp = q2_solution.lp_reg(real_X, Q_X, critic)
 
-            gen_loss = (-1.0) * torch.mean(f_QX)
-            last_gen_loss = gen_loss.item()
+            critic_loss = (-wd) + (lp_coeff * lp)
 
-            # Back prop
-            gen_loss.backward()
-            optim_generator.step()
+            # Backprop
+            critic_loss.backward()
+            optim_critic.step()
 
-            # (NOTE only for logging) Compute F(P)
-            with torch.no_grad():
-                last_fp = torch.mean(critic(train_X)).item()
-                last_fq = torch.mean(f_QX).item()
+            # Log critic loss
+            last_wd = wd.item()
+            last_critic_loss = critic_loss.item()
+
+            # ==
+            # Generator training on every nth batch
+            if (batch_idx + 1) % n_critic_updates == 0:
+                # Generate
+                generator.zero_grad()
+                z_noise = nsampler.sample().to(device)
+                Q_X = generator(z_noise)
+
+                # Critic evaluation
+                critic.zero_grad()
+                f_QX = critic(Q_X)
+
+                # Generator loss
+                gen_loss = (-1.0) * torch.mean(f_QX)
+
+                gen_loss.backward()
+                optim_generator.step()
+
+                # Log loss
+                last_gen_loss = gen_loss.item()
 
             # ==
             # Logging and counters
             total_steps_trained += 1
-            prev_train_X = train_X
+            prev_train_X = real_X
 
             # Print
             if total_steps_trained % args.print_freq == 0:
                 print(f'Epoch {epoch_idx}, batch {batch_idx}, '
                       f'Gen loss: {last_gen_loss}, '
-                      f'Dis loss: {last_critic_loss}')
+                      f'Dis loss: {last_critic_loss}, '
+                      f'WD: {last_wd}')
 
             # Write log to Tensorboard
             if total_steps_trained % args.log_freq == 0:
@@ -141,12 +140,9 @@ def train_gan(args, logger):
                     logger.add_scalar('Train_Loss/Gen_loss', last_gen_loss,
                                       total_steps_trained)
 
-                    logger.add_scalar('Critic/F_P', last_fp,
-                                      total_steps_trained)
-                    logger.add_scalar('Critic/F_Q', last_fq,
-                                      total_steps_trained)
-                    logger.add_scalar('Critic/F_P-F_Q', (last_fp-last_fq),
-                                      total_steps_trained)
+                    # Also save model
+                    mod_path = os.path.join(args.log_dir, 'generator_state_dict.pkl')
+                    torch.save(generator.state_dict(), mod_path)
 
         # ==
         # Per epoch evaluation
@@ -182,24 +178,25 @@ def train_gan(args, logger):
             # Generate images
 
             # To Tensorboard
-            if (epoch_idx + 1) % args.img_log_freq == 0:
-                with torch.no_grad():
-                    # Generate
-                    z_noise = nsampler.sample().to(device)
-                    cur_Q = generator(z_noise)
+            if logger is not None:
+                if (epoch_idx + 1) % args.img_log_freq == 0:
+                    with torch.no_grad():
+                        # Generate
+                        z_noise = nsampler.sample().to(device)
+                        cur_Q = generator(z_noise)
 
-                    # Organize
-                    gen_img_grid = utils.make_grid(cur_Q[0:8], nrow=4,
-                                                   normalize=True)
-                    logger.add_image('Generated_Image', gen_img_grid,
-                                     total_steps_trained)
+                        # Organize
+                        gen_img_grid = utils.make_grid(cur_Q[0:8], nrow=4,
+                                                       normalize=True)
+                        logger.add_image('Generated_Image', gen_img_grid,
+                                         total_steps_trained)
 
-                    # Also save some training images
-                    train_img_grid = utils.make_grid(prev_train_X[0:4],
-                                                     nrow=4,
-                                                     normalize=True)
-                    logger.add_image('Training_Image', train_img_grid,
-                                     total_steps_trained)
+                        # Also save some training images
+                        train_img_grid = utils.make_grid(prev_train_X[0:4],
+                                                         nrow=4,
+                                                         normalize=True)
+                        logger.add_image('Training_Image', train_img_grid,
+                                         total_steps_trained)
 
             # Directly to a directory
             if args.img_out_dir is not None:
@@ -259,9 +256,7 @@ if __name__ == '__main__':
     # Training
     train_gan(args, logger)
 
-    # TODO: save model?
-
     # ==
-    # Use so
-
     # COMPLETE QUALITATIVE EVALUATION
+
+    # NOTE: done in separate script
