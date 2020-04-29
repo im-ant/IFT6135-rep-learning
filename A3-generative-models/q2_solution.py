@@ -31,25 +31,26 @@ def lp_reg(x, y, critic):
     x_hat = (u * x) + ((1-u) * y)
     x_hat = x_hat.clone().detach().requires_grad_(True)
 
-    # Compute gradient of sample
+    # Send sample through function
     f_x = critic(x_hat)
-    f_x_sum = torch.sum(f_x)
-    f_x_sum.backward()
 
-    # Gradient norm of x.grad, x.grad has shape (batch, feature)
-    dx_norm = torch.norm(x_hat.grad, p=2, dim=1,
+    # Compute gradient of sample
+    ones = torch.ones(f_x.size()).to(f_x.device)  # placeholder
+    grads = torch.autograd.grad(outputs=f_x, inputs=x_hat,
+                                grad_outputs=ones,
+                                create_graph=True, retain_graph=True,
+                                only_inputs=True)[0]  # (batch, *, ...)
+    grads = grads.view(grads.size(0), -1)  # (batch, features)
+
+    # Compute nrm and penalty
+    dx_norm = torch.norm(grads, p=2, dim=1,
                          keepdim=False)  # (batch, )
 
-    # Compute the per-element gradient penalty
-    #zeros = torch.zeros(dx_norm.size()).to(x_hat.device)
-    #grad_penalty = torch.max(zeros, (dx_norm - 1.0))  # (batch, )
-
-    # TODO: try the relu in the unit test and in training
-    grad_penalty = torch.nn.functional.relu((dx_norm - 1.0))
-    grad_penalty_sq = grad_penalty.pow(2)
-
+    zeros = torch.zeros(dx_norm.size()).to(x_hat.device)
+    grad_penalty = (torch.max(zeros, (dx_norm - 1.0))).pow(2)  # (batch, )
+    
     # Compute Lipschitz penalty
-    lp = torch.mean(grad_penalty_sq)
+    lp = torch.mean(grad_penalty)
 
     return lp
 
